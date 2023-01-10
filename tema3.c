@@ -26,9 +26,9 @@ int succesor(int x)
 
 int my_floor(float x)
 {
-    if(x > (int) x)
+    if (x > (int)x)
     {
-        return x+1;
+        return x + 1;
     }
 
     return x;
@@ -69,13 +69,21 @@ int *send_btw_coordinators(int sender, int rank, int receiver, int *msg, int siz
     {
         nr = calloc(size, sizeof(int));
         MPI_Recv(nr, size, MPI_INT, (*q)(rank), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if ((*f)(rank) != sender)
+        {
+            MPI_Send(nr, size, MPI_INT, (*f)(rank), 0, MPI_COMM_WORLD);
+            printf("M(%d,%d)\n", rank, (*f)(rank));
+        }
     }
-    else if (rank < receiver)
+    else
     {
         nr = calloc(size, sizeof(int));
         MPI_Recv(nr, size, MPI_INT, (*q)(rank), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        MPI_Send(nr, size, MPI_INT, (*f)(rank), 0, MPI_COMM_WORLD);
-        printf("M(%d,%d)\n", rank, (*f)(rank));
+        if ((*f)(rank) != sender)
+        {
+            MPI_Send(nr, size, MPI_INT, (*f)(rank), 0, MPI_COMM_WORLD);
+            printf("M(%d,%d)\n", rank, (*f)(rank));
+        }
     }
     if (rank == receiver)
     {
@@ -122,9 +130,8 @@ int main(int argc, char *argv[])
         strcat(string, ".txt");
         FILE *f = fopen(string, "r");
 
-        
         fscanf(f, "%d", &number_workers);
-        workers = calloc(number_workers, sizeof(int));
+        workers = calloc(number_workers, sizeof(int)); // workerii lui rank
         for (int i = 0; i < number_workers; i++)
         {
             int aux;
@@ -133,8 +140,8 @@ int main(int argc, char *argv[])
         }
 
         for (int i = 0; i < 4; i++)
-        {
-            int *aux = ring(i, rank, &number_workers, 1);
+        {                                                 // trimitem dim
+            int *aux = ring(i, rank, &number_workers, 1); // pt cand se rupe legatura o facem ring de la 0 la 1 si de la 1 la 0
             if (aux)
             {
                 size[i] = *aux;
@@ -146,7 +153,7 @@ int main(int argc, char *argv[])
         }
 
         for (int i = 0; i < 4; i++)
-        {
+        { // trimitem workers
             int *aux = ring(i, rank, workers, size[i]);
             if (aux)
             {
@@ -160,6 +167,7 @@ int main(int argc, char *argv[])
 
         printare_topo(rank, size, clusters_workers);
 
+        //  trimitem spre workers
         for (int i = 0; i < number_workers; i++)
         {
             for (int j = 0; j < 4; j++)
@@ -176,7 +184,7 @@ int main(int argc, char *argv[])
         }
     }
     else
-    {
+    { // receptionam topologia si in workers
         for (int j = 0; j < 4; j++)
         {
             MPI_Recv(&size[j], 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -193,9 +201,11 @@ int main(int argc, char *argv[])
     }
     int *quantity = NULL;
     int *vector = NULL;
+    int rest_quant = -1, quant = -1;
+    int N;
     if (rank == 0)
     {
-        int N = atoi(argv[1]);
+        N = atoi(argv[1]);
         vector = calloc(N, sizeof(int));
         quantity = calloc(4, sizeof(int));
         for (int k = 0; k < N; k++)
@@ -234,45 +244,82 @@ int main(int argc, char *argv[])
             }
         }
 
-        
-        int quant = quantity[rank] / number_workers;
+        quant = quantity[rank] / number_workers;
         int quant_sum = 0;
 
         for (int i = 0; i < number_workers - 1; i++)
         {
             quant_sum += quant;
+        }
+        rest_quant = quantity[rank] - quant_sum;
+        for (int i = 0; i < number_workers - 1; i++)
+        {
 
+            MPI_Send(&quant, 1, MPI_INT, workers[i], workers[i], MPI_COMM_WORLD);
+            printf("M(%d,%d)\n", rank, workers[i]);
         }
-        int rest_quant = quantity[rank] - quant_sum;
-        for (int i = 0; i < number_workers - 1; i++)
-        {
-            
-            MPI_Send(&quant, 1, MPI_INT, workers[i], workers[i] , MPI_COMM_WORLD);
-        }
-        MPI_Send(&rest_quant, 1, MPI_INT, workers[number_workers -1], workers[number_workers -1], MPI_COMM_WORLD);
+        MPI_Send(&rest_quant, 1, MPI_INT, workers[number_workers - 1], workers[number_workers - 1], MPI_COMM_WORLD);
         offset = 0;
-        //.........................................................
+        printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
+
         for (int i = 0; i < number_workers - 1; i++)
         {
-            MPI_Send(&(vector[offset]), quant, MPI_INT,workers[i], workers[i], MPI_COMM_WORLD);
+            MPI_Send(&(vector[offset]), quant, MPI_INT, workers[i], workers[i], MPI_COMM_WORLD);
             offset += quant;
+            printf("M(%d,%d)\n", rank, workers[i]);
         }
-        MPI_Send(&(vector[offset]), rest_quant, MPI_INT, workers[number_workers -1], workers[number_workers -1], MPI_COMM_WORLD);
-        
+        MPI_Send(&(vector[offset]), rest_quant, MPI_INT, workers[number_workers - 1], workers[number_workers - 1], MPI_COMM_WORLD);
+        printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
     }
     else
     {
         int quant;
         MPI_Status status;
         MPI_Recv(&quant, 1, MPI_INT, MPI_ANY_SOURCE, rank, MPI_COMM_WORLD, &status);
-        vector = calloc(100, sizeof(int));
+        vector = calloc(quant, sizeof(int));
         MPI_Recv(vector, quant, MPI_INT, MPI_ANY_SOURCE, rank, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        printf("rank = %d \n", rank);
-        for(int i = 0; i < quant; i++)
+        for (int i = 0; i < quant; i++)
         {
-           vector[i] *= 5;
+            vector[i] *= 5;
         }
-        printf("\n");
+        //.........................................................
+
+        MPI_Send(vector, quant, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
+        printf("M(%d,%d)\n", rank, status.MPI_SOURCE);
+    }
+
+    if (rank < 4)
+    {
+        int offset = 0;
+        for (int i = 0; i < number_workers - 1; i++)
+        {
+            MPI_Status status;
+            MPI_Recv(&(vector[offset]), quant, MPI_INT, workers[i], 0, MPI_COMM_WORLD, &status);
+            offset += quant;
+        }
+        MPI_Recv(&vector[offset], rest_quant, MPI_INT, workers[number_workers - 1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // primim vectorul de la workers
+
+        int offset_recv = 0;
+        for (int i = 1; i < 4; i++)
+        {
+            int *aux = send_btw_coordinators(i, rank, 0, vector, quantity[i], succesor, previous);
+            offset_recv += quantity[i - 1];
+            if (aux)
+            {
+                memcpy(&(vector[offset_recv]), aux, quantity[i] * sizeof(int));
+            }
+        }
+
+    }
+
+    if(rank == 0)
+    {
+         printf("Rezultat:");
+                for (int i = 0; i < N; i++)
+                {
+                    printf(" %d", vector[i]);
+                }
+                printf("\n");
     }
 
     MPI_Finalize();
