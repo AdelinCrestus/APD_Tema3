@@ -60,7 +60,8 @@ int *ring(int initiator, int rank, int *msg, int size)
     if (rank == initiator)
     {
         MPI_Send(msg, size, MPI_INT, succesor(rank), 0, MPI_COMM_WORLD);
-        printf("M(%d,%d)\n", rank, succesor(rank));
+        if (afisare == 1)
+            printf("M(%d,%d)\n", rank, succesor(rank));
     }
     else if (rank == previous(initiator))
     {
@@ -72,7 +73,8 @@ int *ring(int initiator, int rank, int *msg, int size)
         nr = calloc(size, sizeof(int));
         MPI_Recv(nr, size, MPI_INT, previous(rank), 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Send(nr, size, MPI_INT, succesor(rank), 0, MPI_COMM_WORLD);
-        printf("M(%d,%d)\n", rank, succesor(rank));
+        if (afisare == 1)
+            printf("M(%d,%d)\n", rank, succesor(rank));
     }
     return nr;
 }
@@ -125,7 +127,6 @@ int *ring_def(int initiator, int rank, int *msg, int size, int (*f)(int), int (*
     }
     return nr;
 }
-int afisare;
 int *send_btw_coordinators(int sender, int rank, int receiver, int *msg, int size, int (*f)(int), int (*q)(int), int to_all)
 {
     int *nr = NULL;
@@ -313,13 +314,14 @@ int main(int argc, char *argv[])
             for (int j = 0; j < 4; j++)
             {
                 MPI_Send(&size[j], 1, MPI_INT, workers[i], 0, MPI_COMM_WORLD);
-                printf("M(%d,%d)\n", rank, workers[i]);
+                if (afisare == 1)
+                    printf("M(%d,%d)\n", rank, workers[i]);
             }
             for (int j = 0; j < 4; j++)
             {
                 MPI_Send(clusters_workers[j], size[j], MPI_INT, workers[i], 0, MPI_COMM_WORLD);
-
-                printf("M(%d,%d)\n", rank, workers[i]);
+                if (afisare == 1)
+                    printf("M(%d,%d)\n", rank, workers[i]);
             }
         }
     }
@@ -417,20 +419,24 @@ int main(int argc, char *argv[])
         {
 
             MPI_Send(&quant, 1, MPI_INT, workers[i], workers[i], MPI_COMM_WORLD);
-            printf("M(%d,%d)\n", rank, workers[i]);
+            if (afisare == 1)
+                printf("M(%d,%d)\n", rank, workers[i]);
         }
         MPI_Send(&rest_quant, 1, MPI_INT, workers[number_workers - 1], workers[number_workers - 1], MPI_COMM_WORLD);
         offset = 0;
-        printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
+        if (afisare == 1)
+            printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
 
         for (int i = 0; i < number_workers - 1; i++)
         {
             MPI_Send(&(vector[offset]), quant, MPI_INT, workers[i], workers[i], MPI_COMM_WORLD);
             offset += quant;
-            printf("M(%d,%d)\n", rank, workers[i]);
+            if (afisare == 1)
+                printf("M(%d,%d)\n", rank, workers[i]);
         }
         MPI_Send(&(vector[offset]), rest_quant, MPI_INT, workers[number_workers - 1], workers[number_workers - 1], MPI_COMM_WORLD);
-        printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
+        if (afisare == 1)
+            printf("M(%d,%d)\n", rank, workers[number_workers - 1]);
     }
     else
     {
@@ -443,10 +449,10 @@ int main(int argc, char *argv[])
         {
             vector[i] *= 5;
         }
-        //.........................................................
 
         MPI_Send(vector, quant, MPI_INT, status.MPI_SOURCE, 0, MPI_COMM_WORLD);
-        printf("M(%d,%d)\n", rank, status.MPI_SOURCE);
+        if (afisare == 1)
+            printf("M(%d,%d)\n", rank, status.MPI_SOURCE);
     }
 
     if (rank < 4)
@@ -460,6 +466,7 @@ int main(int argc, char *argv[])
         }
         MPI_Recv(&vector[offset], rest_quant, MPI_INT, workers[number_workers - 1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // primim vectorul de la workers
 
+
         int offset_recv = 0;
         if (er_com == 0)
         {
@@ -468,11 +475,6 @@ int main(int argc, char *argv[])
                 int *aux = NULL;
 
                 aux = send_btw_coordinators(i, rank, 0, vector, quantity[i], previous, succesor, 1);
-
-                // afisare = 1;
-                // // aux = send_btw_coordinators(i, rank, 0, vector, quantity[i], succesor, previous, 0);
-                // aux = ring_def(i, rank, vector, quantity[i], )
-                //     afisare = 0;
 
                 offset_recv += quantity[i - 1];
                 if (aux)
@@ -483,17 +485,19 @@ int main(int argc, char *argv[])
         }
         else if (er_com == 1)
         {
-            for (int i = 0; i < 3; i++)
+            v[0] = 0;
+            for (int i = 1; i < 4; i++)
             {
-                v[i] = i + 1; // punem de la 1 spre 2, 3, 0 pentru a elimina din lista celor care asteapta de la stg la drp pe topologie
+                v[i] = 4 - i; // punem de la 1 spre 2, 3, 0 pentru a elimina din lista celor care asteapta de la stg la drp pe topologie
             }
-            v[3] = 0;
+
             nr_elements_v = 4;
             int i = 1;
-
-            while (i != -1) // trimitem pe inel din 0, apoi din 3, si apoi din 2
+            //.........................................................................
+            while (i != -1) // trimitem pe inel din 1, apoi din 2, si apoi din 3
             {
-                int *aux = ring_def(i, rank, vector, quantity[i], previous1, succesor1, 0, 0, 0, v, nr_elements_v);
+
+                int *aux = ring_def(i, rank, vector, quantity[i], succesor, previous, 0, 0, 0, v, nr_elements_v);
                 nr_elements_v--;
                 int sum = 0;
                 for (int k = 0; k < i; k++)
@@ -501,12 +505,14 @@ int main(int argc, char *argv[])
                     sum += quantity[k];
                 }
                 offset_recv = sum;
-                if (aux)
+                
+                if (aux && rank == 0)
                 {
+
                     memcpy(&(vector[offset_recv]), aux, quantity[i] * sizeof(int));
                 }
 
-                i = previous1(i);
+                i = succesor1(i);
             }
         }
     }
