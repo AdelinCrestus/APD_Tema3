@@ -52,6 +52,43 @@ int previous1(int x)
     return x - 1;
 }
 
+int succesor2(int x)
+{
+    if (x == 1)
+    {
+        return -1;
+    }
+    if (x == 0)
+    {
+        return -1;
+    }
+    if (x == 3)
+    {
+        return 0;
+    }
+
+    return x + 1;
+}
+
+int previous2(int x)
+{
+    if (x == 1)
+    {
+        return -1;
+    }
+
+    if (x == 2)
+    {
+        return -1;
+    }
+
+    if (x == 0)
+    {
+        return 3;
+    }
+    return x - 1;
+}
+
 int afisare = 1;
 
 int *ring(int initiator, int rank, int *msg, int size)
@@ -174,13 +211,16 @@ void printare_topo(int rank, int *size, int **clusters_workers)
     printf("%d ->", rank);
     for (int i = 0; i < 4; i++)
     {
-        printf(" %d:", i);
-        for (int j = 0; j < size[i]; j++)
+        if (size[i] > 0)
         {
-            if (j == 0)
-                printf("%d", clusters_workers[i][j]);
-            else
-                printf(",%d", clusters_workers[i][j]);
+            printf(" %d:", i);
+            for (int j = 0; j < size[i]; j++)
+            {
+                if (j == 0)
+                    printf("%d", clusters_workers[i][j]);
+                else
+                    printf(",%d", clusters_workers[i][j]);
+            }
         }
     }
 
@@ -305,6 +345,59 @@ int main(int argc, char *argv[])
                 i = succesor1(i);
             }
         }
+        else if (er_com == 2)
+        {
+            v[0] = 2;
+            v[1] = 3;
+            v[2] = 0;
+            nr_elements_v = 3;
+            if (rank == 0)
+            {
+                size[rank] = number_workers;
+            }
+            int *aux = NULL;
+            aux = ring_def(0, rank, size, 4, previous2, succesor2, 2, number_workers, 1, v, nr_elements_v);
+            if (rank == 2)
+            {
+                size = aux;
+                size[rank] = number_workers;
+            }
+            aux = ring_def(2, rank, aux, 4, succesor2, previous2, 0, 0, 0, v, nr_elements_v);
+            if (aux)
+            {
+                size = aux;
+            }
+            size[rank] = number_workers;
+            int i = 0;
+            clusters_workers[rank] = workers;
+            while (i != -1)
+            {
+                aux = ring_def(i, rank, workers, size[i], previous2, succesor2, 2, 0, 0, v, nr_elements_v);
+                nr_elements_v--;
+                if (aux && !clusters_workers[i])
+                {
+                    clusters_workers[i] = aux;
+                }
+
+                i = previous2(i);
+            }
+
+            i = 2;
+            v[0] = 0;
+            v[1] = 3;
+            v[2] = 2;
+            nr_elements_v = 3;
+            while (i != -1)
+            {
+                aux = ring_def(i, rank, workers, size[i], succesor2, previous2, 0, 0, 0, v, nr_elements_v);
+                nr_elements_v--;
+                if (aux && !clusters_workers[i])
+                {
+                    clusters_workers[i] = aux;
+                }
+                i = succesor2(i);
+            }
+        }
 
         printare_topo(rank, size, clusters_workers);
 
@@ -341,7 +434,7 @@ int main(int argc, char *argv[])
         }
         printare_topo(rank, size, clusters_workers);
     }
-    int *quantity = NULL;
+    int *quantity = calloc(4, sizeof(int));
     int *vector = NULL;
     int rest_quant = -1, quant = -1;
     int N = atoi(argv[1]);
@@ -384,29 +477,58 @@ int main(int argc, char *argv[])
         {
             aux = ring_def(0, rank, quantity, 4, previous1, succesor1, 1, 0, 0, v, nr_elements_v);
         }
+        else if (er_com == 2)
+        {
+            v[0] = 2;
+            v[1] = 3;
+            v[2] = 0;
+            aux = ring_def(0, rank, quantity, 4, previous2, succesor2, 2, 0, 0, v, nr_elements_v);
+        }
         if (aux)
         {
             quantity = aux;
         }
         int offset = 0;
-        for (int i = 1; i < 4; i++)
-        {
-            offset += quantity[i - 1];
-            int *aux = NULL;
-            if (er_com == 0)
-            {
-                aux = send_btw_coordinators(0, rank, i, &(vector[offset]), quantity[i], succesor, previous, 1);
-            }
-            else if (er_com == 1)
-            {
-                aux = send_btw_coordinators(0, rank, i, &(vector[offset]), quantity[i], previous, succesor, 1);
-            }
-            if (aux)
-            {
-                vector = aux;
-            }
-        }
 
+        if (er_com != 2)
+            for (int i = 1; i < 4; i++)
+            {
+                offset += quantity[i - 1];
+                int *aux = NULL;
+                if (er_com == 0)
+                {
+                    aux = send_btw_coordinators(0, rank, i, &(vector[offset]), quantity[i], succesor, previous, 1);
+                }
+                else if (er_com == 1)
+                {
+                    aux = send_btw_coordinators(0, rank, i, &(vector[offset]), quantity[i], previous, succesor, 1);
+                }
+
+                if (aux)
+                {
+                    vector = aux;
+                }
+            }
+        else
+        {
+            v[0] = 0;
+            v[1] = 3;
+            v[2] = 2;
+            nr_elements_v = 3;
+            offset = quantity[0];
+            for (int k = 2; k <= 3; k++)
+            {
+
+                aux = ring_def(0, rank, &(vector[offset]), quantity[k], previous2, succesor2, k, 0, 0, v, nr_elements_v);
+                if(aux)
+                {
+                    vector = aux;
+                }
+                nr_elements_v--;
+                offset += quantity[k];
+            }
+            
+        }
         quant = quantity[rank] / number_workers;
         int quant_sum = 0;
 
@@ -466,7 +588,7 @@ int main(int argc, char *argv[])
         }
         MPI_Recv(&vector[offset], rest_quant, MPI_INT, workers[number_workers - 1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // primim vectorul de la workers
 
-
+        
         int offset_recv = 0;
         if (er_com == 0)
         {
@@ -505,7 +627,7 @@ int main(int argc, char *argv[])
                     sum += quantity[k];
                 }
                 offset_recv = sum;
-                
+
                 if (aux && rank == 0)
                 {
 
@@ -513,6 +635,31 @@ int main(int argc, char *argv[])
                 }
 
                 i = succesor1(i);
+            }
+        }
+        else if (er_com == 2)
+        {
+            v[0] = 0;
+            v[1] = 3;
+            v[2] = 2;
+            nr_elements_v = 3;
+            int i = 2;
+            while (i != -1)
+            {
+                int *aux = ring_def(i, rank, vector, quantity[i], succesor2, previous2, 0, 0, 0, v, nr_elements_v);
+                nr_elements_v--;
+                int sum = 0;
+                for (int k = 0; k < i; k++)
+                {
+                    sum += quantity[k];
+                }
+                offset_recv = sum;
+
+                if (aux && rank == 0)
+                {
+                    memcpy(&(vector[offset_recv]), aux, quantity[i] * sizeof(int));
+                }
+                i = succesor2(i);
             }
         }
     }
@@ -526,6 +673,6 @@ int main(int argc, char *argv[])
         }
         printf("\n");
     }
-
+    
     MPI_Finalize();
 }
